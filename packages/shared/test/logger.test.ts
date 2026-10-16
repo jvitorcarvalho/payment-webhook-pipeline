@@ -17,7 +17,11 @@ function captureLogs() {
 describe('createLogger', () => {
   it('writes JSON with the service name and keeps event_id and type', () => {
     const logs = captureLogs();
-    const logger = createLogger({ service: 'ingest-api', level: 'info', destination: logs.destination });
+    const logger = createLogger({
+      service: 'ingest-api',
+      level: 'info',
+      destination: logs.destination,
+    });
 
     logger.info({ event_id: 'evt_example_1', type: 'payment.succeeded' }, 'webhook accepted');
 
@@ -32,7 +36,11 @@ describe('createLogger', () => {
 
   it('never writes the payload or the signature, even when a caller passes them', () => {
     const logs = captureLogs();
-    const logger = createLogger({ service: 'ingest-api', level: 'info', destination: logs.destination });
+    const logger = createLogger({
+      service: 'ingest-api',
+      level: 'info',
+      destination: logs.destination,
+    });
 
     logger.info(
       {
