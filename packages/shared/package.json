@@ -8,5 +8,9 @@
   "types": "src/index.ts",
   "exports": {
     ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "pino": "^10.4.0",
+    "zod": "^4.6.7"
   }
 }
