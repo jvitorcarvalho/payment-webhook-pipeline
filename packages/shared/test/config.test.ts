@@ -19,8 +19,8 @@ describe('loadConfig', () => {
   });
 
   it('config_sem_database_url [erro]: throws an error that names DATABASE_URL', () => {
-    expect(() => loadConfig({ AMQP_URL: 'amqp://pipeline:example-password@localhost:5672' })).toThrow(
-      /DATABASE_URL/,
-    );
+    expect(() =>
+      loadConfig({ AMQP_URL: 'amqp://pipeline:example-password@localhost:5672' }),
+    ).toThrow(/DATABASE_URL/);
   });
 });
