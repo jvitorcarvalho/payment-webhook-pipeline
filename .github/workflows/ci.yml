@@ -1,0 +1,76 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# Read-only token by default. Each job asks for more only if it needs it.
+permissions:
+  contents: read
+
+jobs:
+  check:
+    name: typecheck, lint, unit tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run check
+
+  integration:
+    name: integration tests (postgres + rabbitmq)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: pipeline
+          # Throwaway value that exists only inside this CI job. It is not a secret.
+          POSTGRES_PASSWORD: ci-throwaway-password
+          POSTGRES_DB: pipeline
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U pipeline -d pipeline"
+          --health-interval 5s --health-timeout 3s --health-retries 20
+      rabbitmq:
+        image: rabbitmq:3-management-alpine
+        env:
+          RABBITMQ_DEFAULT_USER: pipeline
+          RABBITMQ_DEFAULT_PASS: ci-throwaway-password
+        ports:
+          - 5672:5672
+        options: >-
+          --health-cmd "rabbitmq-diagnostics -q ping"
+          --health-interval 10s --health-timeout 10s --health-retries 20
+    env:
+      DATABASE_URL: postgres://pipeline:ci-throwaway-password@localhost:5432/pipeline
+      AMQP_URL: amqp://pipeline:ci-throwaway-password@localhost:5672
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run test:int
+
+  secrets-scan:
+    name: gitleaks (full history)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Full history: a secret removed in the last commit is still in the history.
+          fetch-depth: 0
+      - uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
