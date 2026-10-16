@@ -56,10 +56,12 @@ describe('gen-secrets', () => {
     // No placeholder survives in the generated file.
     expect(generated).not.toMatch(/CHANGE_ME/);
 
-    // Every key of the example is present and changed.
+    // Every secret placeholder is present and replaced. Plain settings such as LOG_LEVEL stay.
     for (const [key, exampleValue] of Object.entries(example)) {
       expect(env[key], key).toBeDefined();
-      expect(env[key], key).not.toBe(exampleValue);
+      if (exampleValue.includes('CHANGE_ME')) {
+        expect(env[key], key).not.toBe(exampleValue);
+      }
     }
 
     // Passwords are at least 32 characters, and the URL carries the same Postgres password.
