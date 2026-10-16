@@ -14,5 +14,6 @@ paths = [
 regexes = [
   '''CHANGE_ME''',
   '''example-secret-value''',
+  '''example-password''',
   '''ci-throwaway-password''',
 ]
