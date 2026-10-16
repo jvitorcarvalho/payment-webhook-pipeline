@@ -1,0 +1,18 @@
+# gitleaks configuration. The default rules stay on; the allowlist below names the
+# placeholders and fictional values this repository uses on purpose.
+title = "payment-webhook-pipeline"
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Placeholders, fictional examples and the CI-only throwaway password"
+paths = [
+  '''\.env\.example$''',
+  '''package-lock\.json$''',
+]
+regexes = [
+  '''CHANGE_ME''',
+  '''example-secret-value''',
+  '''ci-throwaway-password''',
+]
