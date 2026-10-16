@@ -1,0 +1,48 @@
+# Local stack: PostgreSQL 16 and RabbitMQ 3 with its management UI.
+# Start with: docker compose up -d --wait postgres rabbitmq
+# Passwords come from .env (run `npm run secrets` once). Compose stops if one is missing.
+# Ports are bound to 127.0.0.1 so the services are not exposed to your network.
+name: payment-webhook-pipeline
+
+services:
+  postgres:
+    # Official image: it starts as root only to set up the data directory, then drops to
+    # the unprivileged postgres user. We cannot add a `user:` line without breaking that setup.
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: pipeline
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env (npm run secrets)}
+      POSTGRES_DB: pipeline
+    ports:
+      - '127.0.0.1:5432:5432'
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U pipeline -d pipeline']
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+
+  rabbitmq:
+    # The management image adds the web UI on port 15672. It runs as the unprivileged
+    # rabbitmq user inside the container.
+    image: rabbitmq:3-management-alpine
+    environment:
+      RABBITMQ_DEFAULT_USER: pipeline
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:?set RABBITMQ_PASSWORD in .env (npm run secrets)}
+    ports:
+      - '127.0.0.1:5672:5672'
+      - '127.0.0.1:15672:15672'
+    volumes:
+      - rabbitmq-data:/var/lib/rabbitmq
+    healthcheck:
+      test: ['CMD', 'rabbitmq-diagnostics', '-q', 'ping']
+      interval: 10s
+      timeout: 10s
+      retries: 20
+    restart: unless-stopped
+
+volumes:
+  postgres-data:
+  rabbitmq-data:
