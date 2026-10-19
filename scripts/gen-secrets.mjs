@@ -10,7 +10,7 @@ import { fileURLToPath } from 'node:url';
 // Each placeholder in .env.example is replaced by one random secret.
 // The same placeholder used in two variables (for example inside a URL) gets the same
 // value, so DATABASE_URL and POSTGRES_PASSWORD stay consistent.
-const PLACEHOLDERS = ['CHANGE_ME_POSTGRES', 'CHANGE_ME_RABBITMQ'];
+const PLACEHOLDERS = ['CHANGE_ME_POSTGRES', 'CHANGE_ME_RABBITMQ', 'CHANGE_ME_WEBHOOK'];
 
 function randomSecret() {
   // 32 random bytes become 43 characters. base64url uses only URL-safe characters.

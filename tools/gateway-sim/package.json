@@ -1,0 +1,20 @@
+{
+  "name": "gateway-sim",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node --import=tsx src/index.ts",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "fastify": "^4.26.0",
+    "pg": "^8.11.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "@types/pg": "^8.11.0",
+    "tsx": "^4.7.0",
+    "vitest": "^5.0.5"
+  }
+}

@@ -1,0 +1,101 @@
+import Fastify, { type FastifyInstance, type FastifyRequest } from 'fastify';
+import type pg from 'pg';
+import { healthStatus, type AppConfig, type createLogger } from '@pipeline/shared';
+import { verifySignature } from '@pipeline/shared/signature.js';
+
+interface RequestWithRawBody extends FastifyRequest {
+  rawBody?: string | Buffer;
+}
+
+export interface AppDependencies {
+  pool: pg.Pool;
+  config: AppConfig;
+  logger: ReturnType<typeof createLogger>;
+}
+
+// Builds the Fastify instance without listening, so tests can call it with app.inject().
+export function buildApp({ pool, config, logger }: AppDependencies): FastifyInstance {
+  const app = Fastify({ logger: false });
+
+  app.addContentTypeParser('application/json', { parseAs: 'string' }, (req, body, done) => {
+    // Store raw body for signature verification
+    (req as RequestWithRawBody).rawBody = body;
+    // Always pass the raw body to the handler; let the handler parse JSON
+    done(null, body);
+  });
+
+  app.get('/health', async () => {
+    return healthStatus();
+  });
+
+  app.post('/webhooks/payments', async (request, reply) => {
+    // The JSON parser sets rawBody. If it is missing, the request had no JSON body at all.
+    const rawBodyValue = (request as RequestWithRawBody).rawBody;
+    if (rawBodyValue === undefined) {
+      return reply.code(400).send({ error: 'Missing JSON body' });
+    }
+    const rawBody = rawBodyValue.toString();
+    const signatureHeader = request.headers['x-signature'] as string | undefined;
+
+    const verification = verifySignature(config.webhookSecret, signatureHeader, rawBody);
+    if (!verification.valid) {
+      logger.warn(
+        { event_id: 'unknown', type: 'webhook_rejected', reason: verification.error },
+        'Webhook rejected',
+      );
+      return reply.code(401).send({ error: 'Unauthorized' });
+    }
+
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(rawBody);
+    } catch {
+      return reply.code(400).send({ error: 'Invalid JSON' });
+    }
+
+    // JSON can also be null, a number, a string or an array. Only an object has an event_id.
+    if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
+      return reply.code(400).send({ error: 'Body must be a JSON object' });
+    }
+    const payload = parsed as Record<string, unknown>;
+
+    const eventId = payload.event_id;
+    if (typeof eventId !== 'string' || eventId === '') {
+      return reply.code(400).send({ error: 'Missing or invalid event_id' });
+    }
+
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+
+      const eventResult = await client.query(
+        'INSERT INTO payment_events (event_id, payload) VALUES ($1, $2) ON CONFLICT (event_id) DO NOTHING RETURNING event_id',
+        [eventId, JSON.stringify(payload)],
+      );
+
+      if (eventResult.rowCount !== null && eventResult.rowCount > 0) {
+        await client.query('INSERT INTO outbox (event_id, topic, payload) VALUES ($1, $2, $3)', [
+          eventId,
+          'payment.succeeded',
+          JSON.stringify(payload),
+        ]);
+      }
+
+      await client.query('COMMIT');
+
+      logger.info({ event_id: eventId, type: 'payment.succeeded' }, 'Webhook accepted');
+      return reply.code(200).send({ status: 'accepted' });
+    } catch (error) {
+      await client.query('ROLLBACK');
+      logger.error(
+        { event_id: eventId, type: 'payment.succeeded', err: error },
+        'Webhook processing failed',
+      );
+      return reply.code(500).send({ error: 'Internal server error' });
+    } finally {
+      client.release();
+    }
+  });
+
+  return app;
+}

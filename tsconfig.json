@@ -6,7 +6,12 @@
   "include": [
     "packages/*/src/**/*.ts",
     "packages/*/test/**/*.ts",
+    "services/*/src/**/*.ts",
+    "services/*/test/**/*.ts",
+    "tools/*/src/**/*.ts",
+    "tools/*/test/**/*.ts",
     "scripts/test/**/*.ts",
+    "scripts/*.mjs",
     "vitest.config.ts",
     "vitest.int.config.ts",
     "eslint.config.mjs"
