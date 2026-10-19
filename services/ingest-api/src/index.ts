@@ -3,8 +3,11 @@ import pg from 'pg';
 import { loadConfig, createLogger, healthStatus } from '@pipeline/shared';
 import { verifySignature } from '@pipeline/shared/signature.js';
 import { config as loadDotenv } from 'dotenv';
+import { fileURLToPath } from 'node:url';
+import { dirname, join } from 'node:path';
 
-loadDotenv();
+const __dirname = dirname(fileURLToPath(import.meta.url));
+loadDotenv({ path: join(__dirname, '..', '..', '..', '.env') });
 
 const { Pool } = pg;
 
