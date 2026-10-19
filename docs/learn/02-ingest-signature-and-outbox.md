@@ -90,7 +90,7 @@ fails.
 **Mutation 1: remove `ON CONFLICT`**
 
 ```sql
--- In services/ingest-api/src/index.ts (line 67) and test file:
+-- In services/ingest-api/src/app.ts (the payment_events INSERT):
 -- Change:
 INSERT INTO payment_events (event_id, payload) VALUES ($1, $2) ON CONFLICT (event_id) DO NOTHING RETURNING event_id
 -- To:
@@ -100,7 +100,7 @@ INSERT INTO payment_events (event_id, payload) VALUES ($1, $2) RETURNING event_i
 **Mutation 2: remove the `rowCount` check**
 
 ```ts
-// In services/ingest-api/src/index.ts (line 71) and test file:
+// In services/ingest-api/src/app.ts (the check before the outbox INSERT):
 // Change:
 if (eventResult.rowCount !== null && eventResult.rowCount > 0) {
   await client.query('INSERT INTO outbox ...');
@@ -118,7 +118,8 @@ npm run test:int
 # or 200 both times but 2 rows in outbox (if only rowCount check removed)
 ```
 
-Undo with `git checkout -- services/ingest-api/src/index.ts services/ingest-api/test/ingest.int.test.ts`.
+The integration test imports `buildApp` from `src/app.ts`, so it runs the real route: you only
+mutate the source, never the test. Undo with `git restore services/ingest-api/src/app.ts`.
 
 ## Files created
 
@@ -126,8 +127,9 @@ Undo with `git checkout -- services/ingest-api/src/index.ts services/ingest-api/
 - `scripts/migrate.mjs` — applies migrations in lexical order, records in `schema_migrations`
 - `packages/shared/src/signature.ts` — pure HMAC verification
 - `packages/shared/test/signature.test.ts` — unit tests for signature module
-- `services/ingest-api/src/index.ts` — Fastify server with `/health` and `/webhooks/payments`
-- `services/ingest-api/test/ingest.int.test.ts` — 5 integration tests
+- `services/ingest-api/src/app.ts` — `buildApp()`: Fastify app with `/health` and `/webhooks/payments` (no listen, testable with `app.inject`)
+- `services/ingest-api/src/server.ts` — loads config, creates the pool, listens
+- `services/ingest-api/test/ingest.int.test.ts` — integration tests (real `buildApp`, real Postgres)
 - `tools/gateway-sim/src/index.ts` — CLI to send signed events (supports `--duplicate`)
 - `.env.example`, `scripts/gen-secrets.mjs`, `packages/shared/src/config.ts` — updated with
   `WEBHOOK_SECRET`, `INGEST_PORT`
