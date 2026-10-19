@@ -1,102 +1,52 @@
-import { describe, expect, it, beforeEach, afterAll } from 'vitest';
+import { describe, expect, it, beforeEach, afterEach, afterAll } from 'vitest';
+import { existsSync } from 'node:fs';
+import { Writable } from 'node:stream';
 import pg from 'pg';
-import Fastify, { type FastifyRequest } from 'fastify';
-import { loadConfig } from '@pipeline/shared';
+import { loadConfig, createLogger } from '@pipeline/shared';
 import { computeSignature } from '@pipeline/shared/signature.js';
-import { config as loadDotenv } from 'dotenv';
+import { buildApp } from '../src/app.js';
 
-loadDotenv();
+// Load the git-ignored .env only if it exists (CI and fresh clones may not have one).
+if (existsSync('.env')) {
+  process.loadEnvFile('.env');
+}
 
 const { Pool } = pg;
 
 const config = loadConfig();
 const pool = new Pool({ connectionString: config.databaseUrl });
 
+// Throw-away log destination: these tests assert on HTTP status and rows, not on logs.
+const silentLogs = new Writable({
+  write(_chunk, _encoding, callback) {
+    callback();
+  },
+});
+const logger = createLogger({
+  service: 'ingest-api-test',
+  level: 'fatal',
+  destination: silentLogs,
+});
+
 async function truncateTables() {
   await pool.query('TRUNCATE outbox, payment_events RESTART IDENTITY CASCADE');
 }
 
-interface RequestWithRawBody extends FastifyRequest {
-  rawBody: string | Buffer;
-}
-
-function buildTestApp() {
-  const app = Fastify({ logger: false });
-
-  app.addContentTypeParser('application/json', { parseAs: 'string' }, (req, body, done) => {
-    // Store raw body for signature verification
-    (req as RequestWithRawBody).rawBody = body;
-    // Always pass the raw body to the handler; let the handler parse JSON
-    done(null, body);
-  });
-
-  app.get('/health', async () => {
-    return { status: 'ok' };
-  });
-
-  app.post('/webhooks/payments', async (request, reply) => {
-    const rawBody = (request as RequestWithRawBody).rawBody.toString();
-    const signatureHeader = request.headers['x-signature'] as string | undefined;
-
-    const { verifySignature } = await import('@pipeline/shared/signature.js');
-    const verification = verifySignature(config.webhookSecret, signatureHeader, rawBody);
-    if (!verification.valid) {
-      return reply.code(401).send({ error: 'Unauthorized' });
-    }
-
-    let payload: Record<string, unknown>;
-    try {
-      payload = JSON.parse(rawBody);
-    } catch {
-      return reply.code(400).send({ error: 'Invalid JSON' });
-    }
-
-    const eventId = payload.event_id as string;
-    if (!eventId) {
-      return reply.code(400).send({ error: 'Missing event_id' });
-    }
-
-    const client = await pool.connect();
-    try {
-      await client.query('BEGIN');
-
-      const eventResult = await client.query(
-        'INSERT INTO payment_events (event_id, payload) VALUES ($1, $2) ON CONFLICT (event_id) DO NOTHING RETURNING event_id',
-        [eventId, JSON.stringify(payload)],
-      );
-
-      if (eventResult.rowCount !== null && eventResult.rowCount > 0) {
-        await client.query('INSERT INTO outbox (event_id, topic, payload) VALUES ($1, $2, $3)', [
-          eventId,
-          'payment.succeeded',
-          JSON.stringify(payload),
-        ]);
-      }
-
-      await client.query('COMMIT');
-      return reply.code(200).send({ status: 'accepted' });
-    } catch {
-      await client.query('ROLLBACK');
-      return reply.code(500).send({ error: 'Internal server error' });
-    } finally {
-      client.release();
-    }
-  });
-
-  return app;
-}
-
 describe('ingest-api integration tests', () => {
-  let app: Fastify.FastifyInstance;
+  let app: ReturnType<typeof buildApp>;
 
   beforeEach(async () => {
     await truncateTables();
-    app = buildTestApp();
+    // The real app from src/app.ts, wired to the real pool.
+    app = buildApp({ pool, config, logger });
     await app.ready();
   });
 
-  afterAll(async () => {
+  afterEach(async () => {
     await app.close();
+  });
+
+  afterAll(async () => {
     await pool.end();
   });
 
