@@ -1,11 +1,13 @@
 import { loadConfig } from '@pipeline/shared';
 import { computeSignature } from '@pipeline/shared/signature.js';
-import { config as loadDotenv } from 'dotenv';
+import { existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { dirname, join } from 'node:path';
 
-const __dirname = dirname(fileURLToPath(import.meta.url));
-loadDotenv({ path: join(__dirname, '..', '..', '..', '.env') });
+// Load the git-ignored .env at the repository root, only if it exists.
+const envFile = fileURLToPath(new URL('../../../.env', import.meta.url));
+if (existsSync(envFile)) {
+  process.loadEnvFile(envFile);
+}
 
 const config = loadConfig();
 

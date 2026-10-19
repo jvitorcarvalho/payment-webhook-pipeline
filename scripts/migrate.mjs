@@ -7,9 +7,13 @@ import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import pg from 'pg';
 import { z } from 'zod';
-import { config } from 'dotenv';
+import { existsSync } from 'node:fs';
 
-config();
+// Load the git-ignored .env at the repository root, only if it exists.
+const envFile = join(dirname(fileURLToPath(import.meta.url)), '..', '.env');
+if (existsSync(envFile)) {
+  process.loadEnvFile(envFile);
+}
 
 const { Pool } = pg;
 const __dirname = dirname(fileURLToPath(import.meta.url));
