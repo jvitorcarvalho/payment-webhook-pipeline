@@ -178,4 +178,76 @@ describe('ingest-api integration tests', () => {
     const outbox = await pool.query('SELECT * FROM outbox');
     expect(outbox.rowCount).toBe(0);
   });
+
+  async function expectNothingStored() {
+    const events = await pool.query('SELECT * FROM payment_events');
+    expect(events.rowCount).toBe(0);
+    const outbox = await pool.query('SELECT * FROM outbox');
+    expect(outbox.rowCount).toBe(0);
+  }
+
+  it.each([['null'], ['42'], ['"text"'], ['[]'], ['true']])(
+    'corpo_nao_objeto [erro]: signed JSON body %s returns 400 and writes nothing',
+    async (rawBody) => {
+      const timestamp = Math.floor(Date.now() / 1000);
+      const signature = computeSignature(config.webhookSecret, timestamp, rawBody).toString('hex');
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/webhooks/payments',
+        headers: {
+          'x-signature': `t=${timestamp},v1=${signature}`,
+          'content-type': 'application/json',
+        },
+        body: rawBody,
+      });
+
+      expect(response.statusCode).toBe(400);
+      await expectNothingStored();
+    },
+  );
+
+  it('event_id_invalido [erro]: signed body with a non-string event_id returns 400 and writes nothing', async () => {
+    const timestamp = Math.floor(Date.now() / 1000);
+    const rawBody = JSON.stringify({ event_id: 123 });
+    const signature = computeSignature(config.webhookSecret, timestamp, rawBody).toString('hex');
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/webhooks/payments',
+      headers: {
+        'x-signature': `t=${timestamp},v1=${signature}`,
+        'content-type': 'application/json',
+      },
+      body: rawBody,
+    });
+
+    expect(response.statusCode).toBe(400);
+    await expectNothingStored();
+  });
+
+  it('sem_content_type [erro]: POST without body and content-type returns 400 or 415, not 500', async () => {
+    const response = await app.inject({
+      method: 'POST',
+      url: '/webhooks/payments',
+      headers: { 'x-signature': `t=${Math.floor(Date.now() / 1000)},v1=${'0'.repeat(64)}` },
+    });
+
+    expect([400, 415]).toContain(response.statusCode);
+    await expectNothingStored();
+  });
+
+  it('content_type_errado [erro]: text/plain body returns 400 or 415, not 500', async () => {
+    const { rawBody, header } = makeSignedRequest('evt_test_5');
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/webhooks/payments',
+      headers: { 'x-signature': header, 'content-type': 'text/plain' },
+      body: rawBody,
+    });
+
+    expect([400, 415]).toContain(response.statusCode);
+    await expectNothingStored();
+  });
 });

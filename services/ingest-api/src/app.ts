@@ -4,7 +4,7 @@ import { healthStatus, type AppConfig, type createLogger } from '@pipeline/share
 import { verifySignature } from '@pipeline/shared/signature.js';
 
 interface RequestWithRawBody extends FastifyRequest {
-  rawBody: string | Buffer;
+  rawBody?: string | Buffer;
 }
 
 export interface AppDependencies {
@@ -29,7 +29,12 @@ export function buildApp({ pool, config, logger }: AppDependencies): FastifyInst
   });
 
   app.post('/webhooks/payments', async (request, reply) => {
-    const rawBody = (request as RequestWithRawBody).rawBody.toString();
+    // The JSON parser sets rawBody. If it is missing, the request had no JSON body at all.
+    const rawBodyValue = (request as RequestWithRawBody).rawBody;
+    if (rawBodyValue === undefined) {
+      return reply.code(400).send({ error: 'Missing JSON body' });
+    }
+    const rawBody = rawBodyValue.toString();
     const signatureHeader = request.headers['x-signature'] as string | undefined;
 
     const verification = verifySignature(config.webhookSecret, signatureHeader, rawBody);
@@ -41,16 +46,22 @@ export function buildApp({ pool, config, logger }: AppDependencies): FastifyInst
       return reply.code(401).send({ error: 'Unauthorized' });
     }
 
-    let payload: Record<string, unknown>;
+    let parsed: unknown;
     try {
-      payload = JSON.parse(rawBody);
+      parsed = JSON.parse(rawBody);
     } catch {
       return reply.code(400).send({ error: 'Invalid JSON' });
     }
 
-    const eventId = payload.event_id as string;
-    if (!eventId) {
-      return reply.code(400).send({ error: 'Missing event_id' });
+    // JSON can also be null, a number, a string or an array. Only an object has an event_id.
+    if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
+      return reply.code(400).send({ error: 'Body must be a JSON object' });
+    }
+    const payload = parsed as Record<string, unknown>;
+
+    const eventId = payload.event_id;
+    if (typeof eventId !== 'string' || eventId === '') {
+      return reply.code(400).send({ error: 'Missing or invalid event_id' });
     }
 
     const client = await pool.connect();
