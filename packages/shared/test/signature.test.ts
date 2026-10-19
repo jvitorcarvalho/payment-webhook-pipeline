@@ -88,8 +88,23 @@ describe('isTimestampValid', () => {
     expect(isTimestampValid(timestamp, now)).toBe(false);
   });
 
-  it('returns false for future timestamp', () => {
-    const timestamp = Math.floor((now + 60_000) / 1000);
+  it('returns true for timestamp 1 second in the future (sender clock slightly ahead)', () => {
+    const timestamp = Math.floor((now + 1000) / 1000);
+    expect(isTimestampValid(timestamp, now)).toBe(true);
+  });
+
+  it('returns true for timestamp 4 minutes 59 seconds in the future (within tolerance)', () => {
+    const timestamp = Math.floor((now + 4 * 60_000 + 59_000) / 1000);
+    expect(isTimestampValid(timestamp, now)).toBe(true);
+  });
+
+  it('returns false for timestamp 5 minutes and 1 second in the future', () => {
+    const timestamp = Math.floor((now + 5 * 60_000 + 1000) / 1000);
+    expect(isTimestampValid(timestamp, now)).toBe(false);
+  });
+
+  it('returns false for timestamp 10 minutes in the future', () => {
+    const timestamp = Math.floor((now + 10 * 60_000) / 1000);
     expect(isTimestampValid(timestamp, now)).toBe(false);
   });
 });

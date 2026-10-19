@@ -47,8 +47,9 @@ export function parseSignatureHeader(header: string | undefined): ParsedSignatur
 }
 
 export function isTimestampValid(timestamp: number, now: number = Date.now()): boolean {
-  const ageSeconds = (now - timestamp * 1000) / 1000;
-  return ageSeconds >= 0 && ageSeconds <= MAX_AGE_SECONDS;
+  // Symmetric window: a sender clock a little ahead of ours is as normal as network delay.
+  const skewSeconds = Math.abs(now - timestamp * 1000) / 1000;
+  return skewSeconds <= MAX_AGE_SECONDS;
 }
 
 export function computeSignature(secret: string, timestamp: number, rawBody: string): Buffer {
