@@ -27,20 +27,28 @@ function parseArgs(): GatewaySimOptions {
   for (let i = 0; i < args.length; i++) {
     switch (args[i]) {
       case '--count':
-      case '-n':
-        options.count = parseInt(args[++i], 10);
+      case '-n': {
+        const val = args[++i];
+        if (val) options.count = parseInt(val, 10);
         break;
+      }
       case '--duplicate':
-      case '-d':
-        options.duplicate = args[++i];
+      case '-d': {
+        const val = args[++i];
+        if (val) options.duplicate = val;
         break;
+      }
       case '--url':
-      case '-u':
-        options.url = args[++i];
+      case '-u': {
+        const val = args[++i];
+        if (val) options.url = val;
         break;
-      case '--delay':
-        options.delay = parseInt(args[++i], 10);
+      }
+      case '--delay': {
+        const val = args[++i];
+        if (val) options.delay = parseInt(val, 10);
         break;
+      }
       case '--help':
       case '-h':
         printHelp();
